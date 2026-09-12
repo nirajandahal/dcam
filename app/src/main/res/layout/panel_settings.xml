@@ -1,0 +1,144 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/settingsScrim"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#B3000000"
+    android:visibility="gone"
+    android:clickable="true"
+    android:focusable="true">
+
+    <LinearLayout
+        android:id="@+id/settingsPanel"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom"
+        android:orientation="vertical"
+        android:background="@drawable/bg_panel"
+        android:clickable="true"
+        android:focusable="true"
+        android:paddingStart="18dp"
+        android:paddingEnd="18dp"
+        android:paddingTop="14dp"
+        android:paddingBottom="22dp">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical">
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Settings"
+                android:textColor="@color/white"
+                android:textSize="19sp"
+                android:textStyle="bold" />
+
+            <ImageButton
+                android:id="@+id/settingsClose"
+                android:layout_width="34dp"
+                android:layout_height="34dp"
+                android:padding="7dp"
+                android:background="@android:color/transparent"
+                android:src="@drawable/ic_close"
+                android:scaleType="fitCenter"
+                android:contentDescription="Close" />
+        </LinearLayout>
+
+        <ScrollView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:maxHeight="440dp"
+            android:scrollbars="none">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical">
+
+                <TextView style="@style/SettingLabel" android:text="Video quality" />
+                <TextView
+                    android:id="@+id/qualityHint"
+                    style="@style/SettingHint"
+                    android:text="4K uses the most of your sensor. If your phone can't encode it, DualView steps down and tells you." />
+
+                <LinearLayout android:id="@+id/qualityGroup" style="@style/SegmentRow">
+                    <TextView android:id="@+id/q720" style="@style/OptionChip" android:text="720p" />
+                    <TextView android:id="@+id/q1080" style="@style/OptionChip" android:text="1080p" />
+                    <TextView android:id="@+id/q2160" style="@style/OptionChip" android:text="4K" />
+                </LinearLayout>
+
+                <TextView style="@style/SettingLabel" android:text="Self-timer" />
+                <LinearLayout android:id="@+id/timerGroup" style="@style/SegmentRow">
+                    <TextView android:id="@+id/t0" style="@style/OptionChip" android:text="Off" />
+                    <TextView android:id="@+id/t3" style="@style/OptionChip" android:text="3 s" />
+                    <TextView android:id="@+id/t10" style="@style/OptionChip" android:text="10 s" />
+                </LinearLayout>
+
+                <TextView style="@style/SettingLabel" android:text="Look" />
+                <LinearLayout android:id="@+id/lookGroup" style="@style/SegmentRow">
+                    <TextView android:id="@+id/lookNatural" style="@style/OptionChip" android:text="Natural" />
+                    <TextView android:id="@+id/lookMono" style="@style/OptionChip" android:text="Mono" />
+                    <TextView android:id="@+id/lookWarm" style="@style/OptionChip" android:text="Warm" />
+                    <TextView android:id="@+id/lookVivid" style="@style/OptionChip" android:text="Vivid" />
+                </LinearLayout>
+
+                <LinearLayout style="@style/SwitchRow">
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+                        <TextView style="@style/SettingLabelTight" android:text="Record sound" />
+                        <TextView style="@style/SettingHint" android:text="Uses your phone's built-in noise suppression." />
+                    </LinearLayout>
+                    <androidx.appcompat.widget.SwitchCompat
+                        android:id="@+id/audioSwitch"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:checked="true" />
+                </LinearLayout>
+
+                <LinearLayout style="@style/SwitchRow">
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+                        <TextView style="@style/SettingLabelTight" android:text="Mirror front camera" />
+                        <TextView style="@style/SettingHint" android:text="Saves selfies the way you see them on screen." />
+                    </LinearLayout>
+                    <androidx.appcompat.widget.SwitchCompat
+                        android:id="@+id/mirrorSwitch"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:checked="true" />
+                </LinearLayout>
+
+                <TextView
+                    android:id="@+id/diagnosticsBtn"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="18dp"
+                    android:padding="13dp"
+                    android:gravity="center"
+                    android:background="@drawable/bg_segment"
+                    android:text="Camera diagnostics"
+                    android:textColor="@color/white"
+                    android:textSize="15sp" />
+
+                <TextView
+                    android:id="@+id/savePathText"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="14dp"
+                    android:text="Saved to Movies/DualView and Pictures/DualView on this phone."
+                    android:textColor="@color/muted"
+                    android:textSize="12sp" />
+            </LinearLayout>
+        </ScrollView>
+    </LinearLayout>
+</FrameLayout>
