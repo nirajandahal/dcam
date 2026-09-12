@@ -94,7 +94,9 @@ class MainActivity : AppCompatActivity(), CameraEngine.Listener, RenderEngine.Li
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        CrashLogger.install(this)
         setContentView(R.layout.activity_main)
+        showPendingCrashReport()
         bindViews()
         wireControls()
         renderEngine.listener = this
@@ -111,6 +113,7 @@ class MainActivity : AppCompatActivity(), CameraEngine.Listener, RenderEngine.Li
 
             override fun surfaceDestroyed(holder: SurfaceHolder) {
                 surfaceReady = false
+                renderEngine.detachPreview()
             }
         })
 
@@ -697,6 +700,21 @@ class MainActivity : AppCompatActivity(), CameraEngine.Listener, RenderEngine.Li
             .setTitle("Camera diagnostics")
             .setMessage(builder.toString())
             .setPositiveButton("Close", null)
+            .show()
+    }
+
+    /** If the last run ended badly, show why, so the reason can be reported without a PC. */
+    private fun showPendingCrashReport() {
+        val report = CrashLogger.pendingReport(this) ?: return
+        CrashLogger.clear(this)
+        AlertDialog.Builder(this)
+            .setTitle("DualView closed unexpectedly")
+            .setMessage(report)
+            .setPositiveButton("Copy details") { _, _ ->
+                CrashLogger.copyToClipboard(this, report)
+                Toast.makeText(this, "Crash details copied.", Toast.LENGTH_SHORT).show()
+            }
+            .setNegativeButton("Dismiss", null)
             .show()
     }
 

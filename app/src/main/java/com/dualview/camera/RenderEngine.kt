@@ -83,6 +83,17 @@ class RenderEngine(private val callbackHandler: Handler) {
         }
     }
 
+    /** Called when the preview surface goes away, so we stop drawing into a dead surface. */
+    fun detachPreview() {
+        handler?.post {
+            eglCore?.makeNothingCurrent()
+            eglCore?.releaseSurface(previewEglSurface)
+            previewEglSurface = null
+            previewWidth = 0
+            previewHeight = 0
+        }
+    }
+
     fun setLook(value: Int) {
         handler?.post { look = value }
     }
@@ -144,7 +155,11 @@ class RenderEngine(private val callbackHandler: Handler) {
             val active = recorder
             recorder = null
             releaseEncoderSurfaces()
-            val saved = active?.stop() ?: emptyList()
+            val saved = try {
+                active?.stop() ?: emptyList()
+            } catch (t: Throwable) {
+                emptyList()
+            }
             callbackHandler.post { onDone(saved) }
         }
     }
@@ -177,6 +192,7 @@ class RenderEngine(private val callbackHandler: Handler) {
 
     private fun initGl(surface: Surface, width: Int, height: Int) {
         try {
+            eglCore?.makeNothingCurrent()
             eglCore?.releaseSurface(previewEglSurface)
             previewEglSurface = null
 
@@ -223,11 +239,16 @@ class RenderEngine(private val callbackHandler: Handler) {
         // 1. On-screen preview: the whole frame, so the user can see what falls outside
         //    each crop, exactly like the guide frames suggest.
         if (previewWidth > 0 && previewHeight > 0) {
-            GLES20.glViewport(0, 0, previewWidth, previewHeight)
-            GLES20.glClearColor(0f, 0f, 0f, 1f)
-            GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT)
-            prog.draw(textureId, buildTexMatrix(0), fullFrameCoords, look)
-            core.swapBuffers(previewSurface)
+            try {
+                GLES20.glViewport(0, 0, previewWidth, previewHeight)
+                GLES20.glClearColor(0f, 0f, 0f, 1f)
+                GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT)
+                prog.draw(textureId, buildTexMatrix(0), fullFrameCoords, look)
+                core.swapBuffers(previewSurface)
+            } catch (t: Throwable) {
+                callbackHandler.post { listener?.onRenderError("Preview draw failed: ${t.message}") }
+                return
+            }
         }
 
         // 2. Each recording target, cropped.

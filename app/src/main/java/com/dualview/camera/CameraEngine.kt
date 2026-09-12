@@ -17,6 +17,7 @@ import android.media.ImageReader
 import android.os.Build
 import android.os.Handler
 import android.os.HandlerThread
+import android.os.Looper
 import android.util.Size
 import android.view.Surface
 import java.util.concurrent.Executor
@@ -37,6 +38,7 @@ class CameraEngine(private val context: Context) {
     var listener: Listener? = null
 
     private val manager = context.getSystemService(Context.CAMERA_SERVICE) as CameraManager
+    private val mainHandler = Handler(Looper.getMainLooper())
     private var thread: HandlerThread? = null
     private var handler: Handler? = null
     private val executor = Executor { command -> handler?.post(command) ?: command.run() }
@@ -162,7 +164,9 @@ class CameraEngine(private val context: Context) {
                     val buffer = image.planes[0].buffer
                     val bytes = ByteArray(buffer.remaining())
                     buffer.get(bytes)
-                    listener?.onStillCaptured(bytes, image.width, image.height)
+                    val width = image.width
+                    val height = image.height
+                    mainHandler.post { listener?.onStillCaptured(bytes, width, height) }
                 } catch (t: Throwable) {
                     // Ignore.
                 } finally {
@@ -190,11 +194,12 @@ class CameraEngine(private val context: Context) {
                 override fun onError(camera: CameraDevice, error: Int) {
                     camera.close()
                     device = null
-                    if (!closing) listener?.onCameraError(describeError(error))
+                    if (!closing) { val m = describeError(error); mainHandler.post { listener?.onCameraError(m) } }
                 }
             }, handler)
         } catch (t: Throwable) {
-            listener?.onCameraError("Could not open the camera: ${t.message}")
+            val m = "Could not open the camera: ${t.message}"
+            mainHandler.post { listener?.onCameraError(m) }
         }
     }
 
@@ -221,19 +226,23 @@ class CameraEngine(private val context: Context) {
                 applyZoom(builder)
                 applyTorch(builder)
                 startRepeating()
-                listener?.onCameraReady(sourceSize, sensorRotation, isFront)
+                val size = sourceSize
+                val rotation = sensorRotation
+                val front = isFront
+                mainHandler.post { listener?.onCameraReady(size, rotation, front) }
             }
 
             override fun onConfigureFailed(configured: CameraCaptureSession) {
                 // Some phones advertise stream sizes they will not actually combine with a
                 // full-resolution still. Step down instead of failing outright.
                 if (advanceToSmallerSource()) {
-                    listener?.onSourceDowngraded(sourceSize)
+                    val size = sourceSize
+                    mainHandler.post { listener?.onSourceDowngraded(size) }
                 } else {
-                    listener?.onCameraError(
-                        "This phone would not accept a ${sourceSize.width}x${sourceSize.height}" +
-                                " camera stream. Try a lower quality."
-                    )
+                    val message = "This phone would not accept a " +
+                            "${sourceSize.width}x${sourceSize.height} camera stream." +
+                            " Try a lower quality."
+                    mainHandler.post { listener?.onCameraError(message) }
                 }
             }
         }
@@ -244,7 +253,8 @@ class CameraEngine(private val context: Context) {
             )
             camera.createCaptureSession(config)
         } catch (t: Throwable) {
-            listener?.onCameraError("Could not start the camera session: ${t.message}")
+            val m = "Could not start the camera session: ${t.message}"
+            mainHandler.post { listener?.onCameraError(m) }
         }
     }
 
@@ -325,7 +335,8 @@ class CameraEngine(private val context: Context) {
             applyTorch(builder)
             active.capture(builder.build(), null, handler)
         } catch (t: Throwable) {
-            listener?.onCameraError("Could not take the photo: ${t.message}")
+            val m = "Could not take the photo: ${t.message}"
+            mainHandler.post { listener?.onCameraError(m) }
         }
     }
 
