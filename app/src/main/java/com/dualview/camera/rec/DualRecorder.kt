@@ -1,7 +1,6 @@
 package com.dualview.camera.rec
 
 import android.content.Context
-import android.net.Uri
 import android.view.Surface
 import com.dualview.camera.CaptureStore
 import com.dualview.camera.TargetSpec
@@ -14,7 +13,9 @@ import com.dualview.camera.TargetSpec
 class DualRecorder(
     context: Context,
     private val specs: List<TargetSpec>,
-    private val audioEnabled: Boolean
+    private val audioEnabled: Boolean,
+    private val noiseSuppression: Boolean,
+    private val saveToGallery: Boolean
 ) {
 
     class Track(
@@ -45,7 +46,7 @@ class DualRecorder(
 
         for (spec in specs) {
             val name = CaptureStore.nameFor("DualView", spec.format, stamp, "mp4")
-            val pending = store.beginVideo(name)
+            val pending = store.beginVideo(name, saveToGallery)
             if (pending == null) {
                 cleanupPartial(created)
                 return "Could not create a file in your gallery."
@@ -56,7 +57,7 @@ class DualRecorder(
                 MuxerWrapper(pending.descriptor.fileDescriptor, expectedTracks, spec.orientationHint)
             } catch (t: Throwable) {
                 closeQuietly(pending)
-                store.discardVideo(pending.uri)
+                store.discardVideo(pending)
                 cleanupPartial(created)
                 return "This phone refused to create an MP4 file."
             }
@@ -66,7 +67,7 @@ class DualRecorder(
             } catch (t: Throwable) {
                 muxer.release()
                 closeQuietly(pending)
-                store.discardVideo(pending.uri)
+                store.discardVideo(pending)
                 cleanupPartial(created)
                 return "Your phone's video encoder refused ${spec.displayWidth}x${spec.displayHeight}." +
                         " Try a lower quality."
@@ -78,7 +79,7 @@ class DualRecorder(
         tracks.addAll(created)
 
         if (audioEnabled) {
-            val encoder = AudioEncoder(tracks.map { it.muxer })
+            val encoder = AudioEncoder(tracks.map { it.muxer }, noiseSuppression)
             audio = if (encoder.start()) encoder else null
             if (audio == null) {
                 // Audio failed but video is fine. Muxers expect two tracks each, so tear
@@ -132,14 +133,14 @@ class DualRecorder(
         audio?.setPaused(value)
     }
 
-    /** @return the saved files, or an empty list if nothing usable was produced. */
-    fun stop(): List<Uri> = stopInternal(discard = false)
+    /** @return the names of the saved files, empty if nothing usable was produced. */
+    fun stop(): List<String> = stopInternal(discard = false)
 
-    private fun stopInternal(discard: Boolean): List<Uri> {
+    private fun stopInternal(discard: Boolean): List<String> {
         audio?.stop()
         audio = null
 
-        val saved = ArrayList<Uri>(tracks.size)
+        val saved = ArrayList<String>(tracks.size)
         for (track in tracks) {
             try {
                 track.encoder.drain(true)
@@ -151,10 +152,10 @@ class DualRecorder(
             closeQuietly(track.pending)
 
             if (clean && !discard) {
-                store.publishVideo(track.pending.uri)
-                saved.add(track.pending.uri)
+                store.publishVideo(track.pending)
+                saved.add(track.pending.displayName)
             } else {
-                store.discardVideo(track.pending.uri)
+                store.discardVideo(track.pending)
             }
         }
         tracks.clear()
@@ -166,7 +167,7 @@ class DualRecorder(
             track.encoder.release()
             track.muxer.release()
             closeQuietly(track.pending)
-            store.discardVideo(track.pending.uri)
+            store.discardVideo(track.pending)
         }
     }
 

@@ -59,7 +59,7 @@
                 android:layout_height="wrap_content"
                 android:orientation="vertical">
 
-                <TextView style="@style/SettingLabel" android:text="Video quality" />
+                <TextView style="@style/SettingLabel" android:text="Video resolution" />
                 <TextView
                     android:id="@+id/qualityHint"
                     style="@style/SettingHint"
@@ -69,6 +69,30 @@
                     <TextView android:id="@+id/q720" style="@style/OptionChip" android:text="720p" />
                     <TextView android:id="@+id/q1080" style="@style/OptionChip" android:text="1080p" />
                     <TextView android:id="@+id/q2160" style="@style/OptionChip" android:text="4K" />
+                </LinearLayout>
+
+                <TextView style="@style/SettingLabel" android:text="Frame rate" />
+                <TextView
+                    android:id="@+id/fpsHint"
+                    style="@style/SettingHint"
+                    android:text="24 is cinematic, 60 is smooth. Rates this phone cannot manage are dimmed." />
+
+                <LinearLayout android:id="@+id/fpsGroup" style="@style/SegmentRow">
+                    <TextView android:id="@+id/fps24" style="@style/OptionChip" android:text="24" />
+                    <TextView android:id="@+id/fps30" style="@style/OptionChip" android:text="30" />
+                    <TextView android:id="@+id/fps60" style="@style/OptionChip" android:text="60" />
+                </LinearLayout>
+
+                <TextView style="@style/SettingLabel" android:text="Photo resolution" />
+                <TextView
+                    android:id="@+id/photoHint"
+                    style="@style/SettingHint"
+                    android:text="Max uses the full sensor. Smaller sizes save faster and use less storage." />
+
+                <LinearLayout android:id="@+id/photoGroup" style="@style/SegmentRow">
+                    <TextView android:id="@+id/photo8" style="@style/OptionChip" android:text="8 MP" />
+                    <TextView android:id="@+id/photo12" style="@style/OptionChip" android:text="12 MP" />
+                    <TextView android:id="@+id/photoMax" style="@style/OptionChip" android:text="Max" />
                 </LinearLayout>
 
                 <TextView style="@style/SettingLabel" android:text="Self-timer" />
@@ -93,10 +117,42 @@
                         android:layout_weight="1"
                         android:orientation="vertical">
                         <TextView style="@style/SettingLabelTight" android:text="Record sound" />
-                        <TextView style="@style/SettingHint" android:text="Uses your phone's built-in noise suppression." />
+                        <TextView style="@style/SettingHint" android:text="Turn off to record silent video." />
                     </LinearLayout>
                     <androidx.appcompat.widget.SwitchCompat
                         android:id="@+id/audioSwitch"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:checked="true" />
+                </LinearLayout>
+
+                <LinearLayout style="@style/SwitchRow">
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+                        <TextView style="@style/SettingLabelTight" android:text="Noise cancellation" />
+                        <TextView style="@style/SettingHint" android:text="Uses your phone's built-in suppression to cut background hiss." />
+                    </LinearLayout>
+                    <androidx.appcompat.widget.SwitchCompat
+                        android:id="@+id/noiseSwitch"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:checked="true" />
+                </LinearLayout>
+
+                <LinearLayout style="@style/SwitchRow">
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+                        <TextView style="@style/SettingLabelTight" android:text="Save to gallery automatically" />
+                        <TextView style="@style/SettingHint" android:text="When off, captures wait in the Captures screen until you save or share them." />
+                    </LinearLayout>
+                    <androidx.appcompat.widget.SwitchCompat
+                        android:id="@+id/autoSaveSwitch"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:checked="true" />

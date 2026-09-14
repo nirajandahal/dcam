@@ -29,7 +29,7 @@ class VideoEncoder(val spec: TargetSpec, private val muxer: MuxerWrapper) {
                 MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface
             )
             setInteger(MediaFormat.KEY_BIT_RATE, spec.bitRate)
-            setInteger(MediaFormat.KEY_FRAME_RATE, 30)
+            setInteger(MediaFormat.KEY_FRAME_RATE, spec.fps)
             setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 1)
             setInteger(
                 MediaFormat.KEY_BITRATE_MODE,

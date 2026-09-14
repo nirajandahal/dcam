@@ -1,6 +1,7 @@
 package com.dualview.camera
 
 import android.Manifest
+import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.SurfaceTexture
@@ -56,6 +57,8 @@ class MainActivity : AppCompatActivity(), CameraEngine.Listener, RenderEngine.Li
     private lateinit var modeVideo: TextView
     private lateinit var audioSwitch: SwitchCompat
     private lateinit var mirrorSwitch: SwitchCompat
+    private lateinit var noiseSwitch: SwitchCompat
+    private lateinit var autoSaveSwitch: SwitchCompat
 
     private val cameraEngine by lazy { CameraEngine(this) }
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -64,11 +67,15 @@ class MainActivity : AppCompatActivity(), CameraEngine.Listener, RenderEngine.Li
 
     private var formatMode = FormatMode.BOTH
     private var quality = Quality.FHD
+    private var frameRate = FrameRate.FPS30
+    private var photoRes = PhotoRes.MAX
     private var timerSeconds = 0
     private var look = TextureProgram.LOOK_NATURAL
     private var useFront = false
     private var mirrorFront = true
     private var recordAudio = true
+    private var noiseCancellation = true
+    private var autoSave = true
     private var zoom = 1f
     private var torchOn = false
     private var videoMode = false
@@ -98,6 +105,7 @@ class MainActivity : AppCompatActivity(), CameraEngine.Listener, RenderEngine.Li
         setContentView(R.layout.activity_main)
         showPendingCrashReport()
         bindViews()
+        loadPreferences()
         wireControls()
         renderEngine.listener = this
         cameraEngine.listener = this
@@ -120,9 +128,51 @@ class MainActivity : AppCompatActivity(), CameraEngine.Listener, RenderEngine.Li
         applyFormatMode(formatMode)
         applyMode(videoMode)
         applyQualitySelection()
+        applyFrameRateSelection()
+        applyPhotoResSelection()
         applyTimerSelection()
         applyLookSelection()
         applyZoomSelection()
+    }
+
+    private fun prefs() = getSharedPreferences("dualview", Context.MODE_PRIVATE)
+
+    private fun loadPreferences() {
+        val p = prefs()
+        quality = runCatching { Quality.valueOf(p.getString("quality", quality.name)!!) }
+            .getOrDefault(Quality.FHD)
+        frameRate = runCatching { FrameRate.valueOf(p.getString("fps", frameRate.name)!!) }
+            .getOrDefault(FrameRate.FPS30)
+        photoRes = runCatching { PhotoRes.valueOf(p.getString("photoRes", photoRes.name)!!) }
+            .getOrDefault(PhotoRes.MAX)
+        formatMode = runCatching { FormatMode.valueOf(p.getString("formatMode", formatMode.name)!!) }
+            .getOrDefault(FormatMode.BOTH)
+        timerSeconds = p.getInt("timer", 0)
+        look = p.getInt("look", TextureProgram.LOOK_NATURAL)
+        recordAudio = p.getBoolean("audio", true)
+        noiseCancellation = p.getBoolean("noise", true)
+        autoSave = p.getBoolean("autoSave", true)
+        mirrorFront = p.getBoolean("mirror", true)
+
+        audioSwitch.isChecked = recordAudio
+        noiseSwitch.isChecked = noiseCancellation
+        autoSaveSwitch.isChecked = autoSave
+        mirrorSwitch.isChecked = mirrorFront
+    }
+
+    private fun savePreferences() {
+        prefs().edit()
+            .putString("quality", quality.name)
+            .putString("fps", frameRate.name)
+            .putString("photoRes", photoRes.name)
+            .putString("formatMode", formatMode.name)
+            .putInt("timer", timerSeconds)
+            .putInt("look", look)
+            .putBoolean("audio", recordAudio)
+            .putBoolean("noise", noiseCancellation)
+            .putBoolean("autoSave", autoSave)
+            .putBoolean("mirror", mirrorFront)
+            .apply()
     }
 
     private fun bindViews() {
@@ -150,6 +200,8 @@ class MainActivity : AppCompatActivity(), CameraEngine.Listener, RenderEngine.Li
         modeVideo = findViewById(R.id.modeVideo)
         audioSwitch = findViewById(R.id.audioSwitch)
         mirrorSwitch = findViewById(R.id.mirrorSwitch)
+        noiseSwitch = findViewById(R.id.noiseSwitch)
+        autoSaveSwitch = findViewById(R.id.autoSaveSwitch)
     }
 
     private fun wireControls() {
@@ -192,19 +244,39 @@ class MainActivity : AppCompatActivity(), CameraEngine.Listener, RenderEngine.Li
         findViewById<View>(R.id.q1080).setOnClickListener { changeQuality(Quality.FHD) }
         findViewById<View>(R.id.q2160).setOnClickListener { changeQuality(Quality.UHD) }
 
-        findViewById<View>(R.id.t0).setOnClickListener { timerSeconds = 0; applyTimerSelection() }
-        findViewById<View>(R.id.t3).setOnClickListener { timerSeconds = 3; applyTimerSelection() }
-        findViewById<View>(R.id.t10).setOnClickListener { timerSeconds = 10; applyTimerSelection() }
+        findViewById<View>(R.id.t0).setOnClickListener { timerSeconds = 0; applyTimerSelection(); savePreferences() }
+        findViewById<View>(R.id.t3).setOnClickListener { timerSeconds = 3; applyTimerSelection(); savePreferences() }
+        findViewById<View>(R.id.t10).setOnClickListener { timerSeconds = 10; applyTimerSelection(); savePreferences() }
 
         findViewById<View>(R.id.lookNatural).setOnClickListener { changeLook(TextureProgram.LOOK_NATURAL) }
         findViewById<View>(R.id.lookMono).setOnClickListener { changeLook(TextureProgram.LOOK_MONO) }
         findViewById<View>(R.id.lookWarm).setOnClickListener { changeLook(TextureProgram.LOOK_WARM) }
         findViewById<View>(R.id.lookVivid).setOnClickListener { changeLook(TextureProgram.LOOK_VIVID) }
 
-        audioSwitch.setOnCheckedChangeListener { _, checked -> recordAudio = checked }
+        findViewById<View>(R.id.fps24).setOnClickListener { changeFrameRate(FrameRate.FPS24) }
+        findViewById<View>(R.id.fps30).setOnClickListener { changeFrameRate(FrameRate.FPS30) }
+        findViewById<View>(R.id.fps60).setOnClickListener { changeFrameRate(FrameRate.FPS60) }
+
+        findViewById<View>(R.id.photo8).setOnClickListener { changePhotoRes(PhotoRes.STANDARD) }
+        findViewById<View>(R.id.photo12).setOnClickListener { changePhotoRes(PhotoRes.HIGH) }
+        findViewById<View>(R.id.photoMax).setOnClickListener { changePhotoRes(PhotoRes.MAX) }
+
+        audioSwitch.setOnCheckedChangeListener { _, checked ->
+            recordAudio = checked
+            savePreferences()
+        }
+        noiseSwitch.setOnCheckedChangeListener { _, checked ->
+            noiseCancellation = checked
+            savePreferences()
+        }
+        autoSaveSwitch.setOnCheckedChangeListener { _, checked ->
+            autoSave = checked
+            savePreferences()
+        }
         mirrorSwitch.setOnCheckedChangeListener { _, checked ->
             mirrorFront = checked
             renderEngine.setMirror(useFront && mirrorFront)
+            savePreferences()
         }
 
         findViewById<View>(R.id.diagnosticsBtn).setOnClickListener { showDiagnostics() }
@@ -270,7 +342,7 @@ class MainActivity : AppCompatActivity(), CameraEngine.Listener, RenderEngine.Li
 
     private fun startCameraStack() {
         cameraEngine.startThread()
-        if (!cameraEngine.prepare(useFront, quality)) {
+        if (!cameraEngine.prepare(useFront, quality, frameRate.value, photoRes)) {
             statusText.text = "No usable camera found on this phone."
             return
         }
@@ -284,7 +356,9 @@ class MainActivity : AppCompatActivity(), CameraEngine.Listener, RenderEngine.Li
         ) {
             if (renderEngine.hasSurfaceTexture() && !cameraOpen) openCameraNow()
         }
+        renderEngine.setFrameRate(frameRate.value)
         updatePlan()
+        applyFrameRateSelection()
         flashBtn.visibility = if (cameraEngine.hasTorch()) View.VISIBLE else View.GONE
     }
 
@@ -381,7 +455,7 @@ class MainActivity : AppCompatActivity(), CameraEngine.Listener, RenderEngine.Li
         val uprightHeight = if (quarterTurn) source.width else source.height
 
         lastPlan = Planner.plan(
-            Planner.formatsFor(formatMode), quality, uprightWidth, uprightHeight
+            Planner.formatsFor(formatMode), quality, uprightWidth, uprightHeight, frameRate.value
         )
 
         if (lastPlan.isEmpty()) {
@@ -391,7 +465,7 @@ class MainActivity : AppCompatActivity(), CameraEngine.Listener, RenderEngine.Li
 
         val described = lastPlan.joinToString("   ") {
             "${it.format.label} ${it.displayWidth}x${it.displayHeight}"
-        }
+        } + "  ·  ${frameRate.label}fps"
         val wanted = Planner.formatsFor(formatMode).size
         val note = if (lastPlan.size < wanted) {
             "\nOnly one format at a time: this chip allows ${EncoderCaps.maxInstances()} video encoder(s)."
@@ -405,6 +479,29 @@ class MainActivity : AppCompatActivity(), CameraEngine.Listener, RenderEngine.Li
         if (isRecording) return
         quality = value
         applyQualitySelection()
+        savePreferences()
+        restartForNewSource()
+    }
+
+    private fun changeFrameRate(value: FrameRate) {
+        if (isRecording) return
+        if (!cameraEngine.availableFrameRates().contains(value)) {
+            Toast.makeText(
+                this, "This camera cannot run at ${value.label}fps.", Toast.LENGTH_SHORT
+            ).show()
+            return
+        }
+        frameRate = value
+        applyFrameRateSelection()
+        savePreferences()
+        restartForNewSource()
+    }
+
+    private fun changePhotoRes(value: PhotoRes) {
+        if (isRecording) return
+        photoRes = value
+        applyPhotoResSelection()
+        savePreferences()
         restartForNewSource()
     }
 
@@ -437,6 +534,7 @@ class MainActivity : AppCompatActivity(), CameraEngine.Listener, RenderEngine.Li
         look = value
         renderEngine.setLook(value)
         applyLookSelection()
+        savePreferences()
     }
 
     // ---- Capture ----
@@ -488,19 +586,20 @@ class MainActivity : AppCompatActivity(), CameraEngine.Listener, RenderEngine.Li
         val rotation = cameraEngine.sensorRotation
         val mirror = useFront && mirrorFront
         val currentLook = look
+        val toGallery = autoSave
 
         worker.execute {
             val saved = PhotoProcessor.process(
-                this, jpeg, imageWidth, imageHeight, rotation, mirror, formats, currentLook
+                this, jpeg, imageWidth, imageHeight, rotation, mirror, formats,
+                currentLook, toGallery
             )
             mainHandler.post {
                 if (saved.isEmpty()) {
                     Toast.makeText(this, "Could not save the photo.", Toast.LENGTH_SHORT).show()
                 } else {
-                    val label = saved.joinToString(" + ") { it.first.label }
-                    Toast.makeText(
-                        this, "Saved $label to Pictures/DualView", Toast.LENGTH_SHORT
-                    ).show()
+                    val label = saved.joinToString(" + ") { it.label }
+                    val where = if (toGallery) "Pictures/DualView" else "Captures"
+                    Toast.makeText(this, "Saved $label to $where", Toast.LENGTH_SHORT).show()
                 }
             }
         }
@@ -517,7 +616,7 @@ class MainActivity : AppCompatActivity(), CameraEngine.Listener, RenderEngine.Li
             return
         }
 
-        val newRecorder = DualRecorder(this, lastPlan, recordAudio)
+        val newRecorder = DualRecorder(this, lastPlan, recordAudio, noiseCancellation, autoSave)
         val failure = newRecorder.start()
         if (failure != null) {
             Toast.makeText(this, failure, Toast.LENGTH_LONG).show()
@@ -554,9 +653,10 @@ class MainActivity : AppCompatActivity(), CameraEngine.Listener, RenderEngine.Li
                     this, "The recording could not be saved.", Toast.LENGTH_LONG
                 ).show()
             } else {
+                val where = if (autoSave) "Movies/DualView" else "Captures"
                 Toast.makeText(
                     this,
-                    "Saved ${saved.size} video${if (saved.size > 1) "s" else ""} to Movies/DualView",
+                    "Saved ${saved.size} video${if (saved.size > 1) "s" else ""} to $where",
                     Toast.LENGTH_SHORT
                 ).show()
             }
@@ -608,6 +708,7 @@ class MainActivity : AppCompatActivity(), CameraEngine.Listener, RenderEngine.Li
         fmtVertical.isSelected = mode == FormatMode.VERTICAL_ONLY
         fmtBoth.isSelected = mode == FormatMode.BOTH
         fmtHorizontal.isSelected = mode == FormatMode.HORIZONTAL_ONLY
+        savePreferences()
         updatePlan()
     }
 
@@ -624,6 +725,26 @@ class MainActivity : AppCompatActivity(), CameraEngine.Listener, RenderEngine.Li
         findViewById<View>(R.id.q720).isSelected = quality == Quality.HD
         findViewById<View>(R.id.q1080).isSelected = quality == Quality.FHD
         findViewById<View>(R.id.q2160).isSelected = quality == Quality.UHD
+    }
+
+    /** Dims the frame rates this camera cannot deliver, rather than letting them fail later. */
+    private fun applyFrameRateSelection() {
+        val supported = cameraEngine.availableFrameRates()
+        val rows = listOf(
+            FrameRate.FPS24 to findViewById<View>(R.id.fps24),
+            FrameRate.FPS30 to findViewById<View>(R.id.fps30),
+            FrameRate.FPS60 to findViewById<View>(R.id.fps60)
+        )
+        for ((rate, view) in rows) {
+            view.isSelected = frameRate == rate
+            view.alpha = if (supported.contains(rate)) 1f else 0.35f
+        }
+    }
+
+    private fun applyPhotoResSelection() {
+        findViewById<View>(R.id.photo8).isSelected = photoRes == PhotoRes.STANDARD
+        findViewById<View>(R.id.photo12).isSelected = photoRes == PhotoRes.HIGH
+        findViewById<View>(R.id.photoMax).isSelected = photoRes == PhotoRes.MAX
     }
 
     private fun applyTimerSelection() {
@@ -676,7 +797,11 @@ class MainActivity : AppCompatActivity(), CameraEngine.Listener, RenderEngine.Li
             builder.append("Encoders at once: ${report.maxInstances}\n\n")
         }
 
-        builder.append("PLANNED OUTPUT (${quality.label})\n")
+        builder.append("Frame rates offered: ")
+        builder.append(cameraEngine.availableFrameRates().joinToString(", ") { it.label })
+        builder.append("\n\n")
+
+        builder.append("PLANNED OUTPUT (${quality.label}, ${frameRate.label}fps)\n")
         if (lastPlan.isEmpty()) {
             builder.append("Nothing recordable at this quality.\n")
         } else {
@@ -719,11 +844,19 @@ class MainActivity : AppCompatActivity(), CameraEngine.Listener, RenderEngine.Li
     }
 
     private fun openGallery() {
-        try {
-            startActivity(Intent(Intent.ACTION_VIEW, MediaStore.Images.Media.EXTERNAL_CONTENT_URI))
-        } catch (t: Throwable) {
-            Toast.makeText(this, "No gallery app found.", Toast.LENGTH_SHORT).show()
+        // With autosave on there is nothing waiting inside the app, so go straight to the
+        // phone's own gallery.
+        if (autoSave && CaptureStore(this).privateCaptures().isEmpty()) {
+            try {
+                startActivity(
+                    Intent(Intent.ACTION_VIEW, MediaStore.Images.Media.EXTERNAL_CONTENT_URI)
+                )
+                return
+            } catch (t: Throwable) {
+                // Fall through to the in-app list.
+            }
         }
+        startActivity(Intent(this, CapturesActivity::class.java))
     }
 
     companion object {

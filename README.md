@@ -29,11 +29,30 @@ Requires Android 10 (API 29) or newer.
 To build locally instead, open the folder in Android Studio and run, or use
 `./gradlew assembleDebug` if you generate a Gradle wrapper first.
 
+## Settings
+
+**Video resolution** 720p, 1080p or 4K. **Frame rate** 24, 30 or 60 — rates the camera
+cannot deliver are dimmed rather than offered and left to fail. **Photo resolution** 8 MP,
+12 MP or the sensor's maximum. **Self-timer**, **Look**, **Record sound**, **Noise
+cancellation**, **Mirror front camera**, and **Save to gallery automatically**.
+
+Everything is remembered between launches.
+
+With **Save to gallery automatically** off, captures wait in the in-app Captures screen,
+where each one can be saved to the gallery, shared or deleted.
+
+A note on 24fps: few phones offer it natively. Where the sensor only runs at 30, the app
+drops the surplus frames, which gives a 24fps file but a slightly less even cadence than a
+camera with true 24fps support.
+
 ## What the app adapts to
 
 Phones vary enormously in what their video encoder accepts, so the app asks rather than
 assumes:
 
+- **Frame rate.** 60fps roughly doubles the pixel throughput, so the app checks the encoder
+  at the requested rate and steps the resolution down if it will not sustain it. 4K60 on
+  both formats at once is beyond most phones.
 - **Frame size limits.** Many mid-range chips cap out around 1920x1088 and reject a tall
   1080x1920 frame. When that happens the app encodes a landscape buffer and writes rotation
   metadata, so the vertical video still plays upright instead of silently failing.

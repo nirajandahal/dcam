@@ -7,24 +7,30 @@ import android.net.Uri
 import android.os.Environment
 import android.os.ParcelFileDescriptor
 import android.provider.MediaStore
+import java.io.File
 import java.io.OutputStream
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
 /**
- * Writes finished captures into the phone's own media library, so they appear in Google
- * Photos or Gallery like any other recording — no share sheet, no Downloads folder.
+ * Writes finished captures either into the phone's media library (so they show up in
+ * Gallery straight away) or into the app's own folder, when the person would rather decide
+ * later from the Captures screen.
  */
 class CaptureStore(private val context: Context) {
 
     data class PendingVideo(
-        val uri: Uri,
+        val uri: Uri?,
+        val file: File?,
         val descriptor: ParcelFileDescriptor,
         val displayName: String
     )
 
-    fun beginVideo(displayName: String): PendingVideo? {
+    fun beginVideo(displayName: String, toGallery: Boolean): PendingVideo? =
+        if (toGallery) beginGalleryVideo(displayName) else beginPrivateVideo(displayName)
+
+    private fun beginGalleryVideo(displayName: String): PendingVideo? {
         val values = ContentValues().apply {
             put(MediaStore.Video.Media.DISPLAY_NAME, displayName)
             put(MediaStore.Video.Media.MIME_TYPE, "video/mp4")
@@ -45,13 +51,30 @@ class CaptureStore(private val context: Context) {
             null
         }
         if (descriptor == null) {
-            discardVideo(uri)
+            deleteUri(uri)
             return null
         }
-        return PendingVideo(uri, descriptor, displayName)
+        return PendingVideo(uri, null, descriptor, displayName)
     }
 
-    fun publishVideo(uri: Uri) {
+    private fun beginPrivateVideo(displayName: String): PendingVideo? {
+        val dir = privateDir(Environment.DIRECTORY_MOVIES) ?: return null
+        val file = File(dir, displayName)
+        val descriptor = try {
+            ParcelFileDescriptor.open(
+                file,
+                ParcelFileDescriptor.MODE_READ_WRITE or
+                        ParcelFileDescriptor.MODE_CREATE or
+                        ParcelFileDescriptor.MODE_TRUNCATE
+            )
+        } catch (t: Throwable) {
+            null
+        } ?: return null
+        return PendingVideo(null, file, descriptor, displayName)
+    }
+
+    fun publishVideo(pending: PendingVideo) {
+        val uri = pending.uri ?: return
         val values = ContentValues().apply { put(MediaStore.Video.Media.IS_PENDING, 0) }
         try {
             context.contentResolver.update(uri, values, null, null)
@@ -60,7 +83,18 @@ class CaptureStore(private val context: Context) {
         }
     }
 
-    fun discardVideo(uri: Uri) {
+    fun discardVideo(pending: PendingVideo) {
+        pending.uri?.let { deleteUri(it) }
+        pending.file?.let {
+            try {
+                it.delete()
+            } catch (t: Throwable) {
+                // Ignore.
+            }
+        }
+    }
+
+    private fun deleteUri(uri: Uri) {
         try {
             context.contentResolver.delete(uri, null, null)
         } catch (t: Throwable) {
@@ -68,7 +102,11 @@ class CaptureStore(private val context: Context) {
         }
     }
 
-    fun saveImage(bitmap: Bitmap, displayName: String): Uri? {
+    fun saveImage(bitmap: Bitmap, displayName: String, toGallery: Boolean): Boolean =
+        if (toGallery) saveGalleryImage(bitmap, displayName)
+        else savePrivateImage(bitmap, displayName)
+
+    private fun saveGalleryImage(bitmap: Bitmap, displayName: String): Boolean {
         val values = ContentValues().apply {
             put(MediaStore.Images.Media.DISPLAY_NAME, displayName)
             put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg")
@@ -81,7 +119,7 @@ class CaptureStore(private val context: Context) {
             context.contentResolver.insert(collection, values)
         } catch (t: Throwable) {
             null
-        } ?: return null
+        } ?: return false
 
         var stream: OutputStream? = null
         val ok = try {
@@ -98,21 +136,86 @@ class CaptureStore(private val context: Context) {
         }
 
         if (!ok) {
-            try {
-                context.contentResolver.delete(uri, null, null)
-            } catch (t: Throwable) {
-                // Ignore.
-            }
-            return null
+            deleteUri(uri)
+            return false
         }
-
         val done = ContentValues().apply { put(MediaStore.Images.Media.IS_PENDING, 0) }
         try {
             context.contentResolver.update(uri, done, null, null)
         } catch (t: Throwable) {
             // Ignore.
         }
-        return uri
+        return true
+    }
+
+    private fun savePrivateImage(bitmap: Bitmap, displayName: String): Boolean {
+        val dir = privateDir(Environment.DIRECTORY_PICTURES) ?: return false
+        val file = File(dir, displayName)
+        return try {
+            file.outputStream().use { bitmap.compress(Bitmap.CompressFormat.JPEG, 95, it) }
+        } catch (t: Throwable) {
+            false
+        }
+    }
+
+    /** Copies an app-held capture into the gallery, used by the Captures screen. */
+    fun exportToGallery(file: File): Boolean {
+        val isVideo = file.name.endsWith(".mp4", ignoreCase = true)
+        val values = ContentValues().apply {
+            put(MediaStore.MediaColumns.DISPLAY_NAME, file.name)
+            put(MediaStore.MediaColumns.MIME_TYPE, if (isVideo) "video/mp4" else "image/jpeg")
+            put(
+                MediaStore.MediaColumns.RELATIVE_PATH,
+                if (isVideo) "${Environment.DIRECTORY_MOVIES}/$ALBUM"
+                else "${Environment.DIRECTORY_PICTURES}/$ALBUM"
+            )
+            put(MediaStore.MediaColumns.IS_PENDING, 1)
+        }
+        val collection = if (isVideo) {
+            MediaStore.Video.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
+        } else {
+            MediaStore.Images.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
+        }
+        val uri = try {
+            context.contentResolver.insert(collection, values)
+        } catch (t: Throwable) {
+            null
+        } ?: return false
+
+        val ok = try {
+            context.contentResolver.openOutputStream(uri)?.use { output ->
+                file.inputStream().use { input -> input.copyTo(output) }
+            } != null
+        } catch (t: Throwable) {
+            false
+        }
+        if (!ok) {
+            deleteUri(uri)
+            return false
+        }
+        val done = ContentValues().apply { put(MediaStore.MediaColumns.IS_PENDING, 0) }
+        try {
+            context.contentResolver.update(uri, done, null, null)
+        } catch (t: Throwable) {
+            // Ignore.
+        }
+        return true
+    }
+
+    fun privateDir(kind: String): File? {
+        val dir = context.getExternalFilesDir(kind) ?: return null
+        if (!dir.exists()) dir.mkdirs()
+        return dir
+    }
+
+    fun privateCaptures(): List<File> {
+        val result = ArrayList<File>()
+        for (kind in listOf(Environment.DIRECTORY_MOVIES, Environment.DIRECTORY_PICTURES)) {
+            privateDir(kind)?.listFiles()?.let { files ->
+                result.addAll(files.filter { it.isFile && it.length() > 0 })
+            }
+        }
+        return result.sortedByDescending { it.lastModified() }
     }
 
     companion object {

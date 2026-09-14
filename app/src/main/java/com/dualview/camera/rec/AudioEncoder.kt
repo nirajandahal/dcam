@@ -15,7 +15,10 @@ import java.nio.ByteBuffer
  * muxer. Encoding twice would waste a codec instance, and instances are exactly what
  * mid-range phones run short of.
  */
-class AudioEncoder(private val muxers: List<MuxerWrapper>) {
+class AudioEncoder(
+    private val muxers: List<MuxerWrapper>,
+    private val noiseSuppression: Boolean
+) {
 
     private var audioRecord: AudioRecord? = null
     private var codec: MediaCodec? = null
@@ -52,7 +55,7 @@ class AudioEncoder(private val muxers: List<MuxerWrapper>) {
             return false
         }
 
-        if (NoiseSuppressor.isAvailable()) {
+        if (noiseSuppression && NoiseSuppressor.isAvailable()) {
             noiseSuppressor = try {
                 NoiseSuppressor.create(record.audioSessionId)?.apply { enabled = true }
             } catch (t: Throwable) {

@@ -1,7 +1,6 @@
 package com.dualview.camera
 
 import android.graphics.SurfaceTexture
-import android.net.Uri
 import android.opengl.EGLSurface
 import android.opengl.GLES20
 import android.opengl.Matrix
@@ -44,6 +43,8 @@ class RenderEngine(private val callbackHandler: Handler) {
     private var baseRotation = 90
     private var mirror = false
     private var look = TextureProgram.LOOK_NATURAL
+    private var frameIntervalNs = 1_000_000_000L / 30
+    private var lastEncodedNs = 0L
 
     private var recorder: DualRecorder? = null
     private val encoderSurfaces = LinkedHashMap<TargetSpec, EGLSurface>()
@@ -98,6 +99,18 @@ class RenderEngine(private val callbackHandler: Handler) {
         handler?.post { look = value }
     }
 
+    /**
+     * The camera may hand over more frames than the chosen rate needs — asking for 24 on a
+     * sensor that only runs at 30, for instance — so surplus frames are skipped rather than
+     * encoded, keeping the file's timing honest.
+     */
+    fun setFrameRate(fps: Int) {
+        handler?.post {
+            frameIntervalNs = 1_000_000_000L / fps.coerceAtLeast(1)
+            lastEncodedNs = 0L
+        }
+    }
+
     fun setMirror(value: Boolean) {
         handler?.post { mirror = value }
     }
@@ -141,11 +154,12 @@ class RenderEngine(private val callbackHandler: Handler) {
                 return@post
             }
             recorder = newRecorder
+            lastEncodedNs = 0L
             callbackHandler.post { onResult(null) }
         }
     }
 
-    fun endRecording(onDone: (List<Uri>) -> Unit) {
+    fun endRecording(onDone: (List<String>) -> Unit) {
         val h = handler
         if (h == null) {
             callbackHandler.post { onDone(emptyList()) }
@@ -254,6 +268,11 @@ class RenderEngine(private val callbackHandler: Handler) {
         // 2. Each recording target, cropped.
         val active = recorder ?: return
         if (active.isPaused) return
+
+        val nowNs = System.nanoTime()
+        if (lastEncodedNs != 0L && nowNs - lastEncodedNs < frameIntervalNs - 2_000_000L) return
+        lastEncodedNs = nowNs
+
         val timestampNs = active.presentationTimeNs()
 
         for ((spec, eglSurface) in encoderSurfaces) {
@@ -279,7 +298,7 @@ class RenderEngine(private val callbackHandler: Handler) {
         Matrix.setIdentityM(work, 0)
 
         Matrix.translateM(work, 0, 0.5f, 0.5f, 0f)
-        Matrix.rotateM(work, 0, baseRotation.toFloat(), 0f, 0f, 1f)
+        Matrix.rotateM(work, 0, -baseRotation.toFloat(), 0f, 0f, 1f)
         Matrix.translateM(work, 0, -0.5f, -0.5f, 0f)
 
         if (mirror) {
@@ -290,7 +309,7 @@ class RenderEngine(private val callbackHandler: Handler) {
 
         if (extraRotation != 0) {
             Matrix.translateM(work, 0, 0.5f, 0.5f, 0f)
-            Matrix.rotateM(work, 0, extraRotation.toFloat(), 0f, 0f, 1f)
+            Matrix.rotateM(work, 0, -extraRotation.toFloat(), 0f, 0f, 1f)
             Matrix.translateM(work, 0, -0.5f, -0.5f, 0f)
         }
 

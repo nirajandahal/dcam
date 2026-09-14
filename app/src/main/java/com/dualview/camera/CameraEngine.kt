@@ -18,6 +18,7 @@ import android.os.Build
 import android.os.Handler
 import android.os.HandlerThread
 import android.os.Looper
+import android.util.Range
 import android.util.Size
 import android.view.Surface
 import java.util.concurrent.Executor
@@ -59,6 +60,8 @@ class CameraEngine(private val context: Context) {
 
     private var sourceCandidates: List<Size> = emptyList()
     private var sourceIndex = 0
+    private var targetFps = 30
+    private var photoRes = PhotoRes.MAX
     private var torchOn = false
     private var zoomRatio = 1f
     private var closing = false
@@ -94,7 +97,9 @@ class CameraEngine(private val context: Context) {
     }
 
     /** Resolves the camera and the stream size without opening anything yet. */
-    fun prepare(front: Boolean, quality: Quality): Boolean {
+    fun prepare(front: Boolean, quality: Quality, fps: Int, stillRes: PhotoRes): Boolean {
+        targetFps = fps
+        photoRes = stillRes
         val id = findCameraId(front) ?: findCameraId(!front) ?: return false
         val chars = try {
             manager.getCameraCharacteristics(id)
@@ -118,7 +123,7 @@ class CameraEngine(private val context: Context) {
             } catch (t: Throwable) {
                 0L
             }
-            minDuration <= 0L || minDuration <= 41_700_000L
+            minDuration <= 0L || minDuration <= (1_000_000_000L / targetFps) + 1_000_000L
         }.ifEmpty { sizes }
 
         sourceSize = Planner.pickSourceSize(smooth, quality)
@@ -128,13 +133,34 @@ class CameraEngine(private val context: Context) {
         return true
     }
 
+    fun availableFrameRates(): List<FrameRate> {
+        val chars = characteristics ?: return listOf(FrameRate.FPS30)
+        val ranges = chars.get(CameraCharacteristics.CONTROL_AE_AVAILABLE_TARGET_FPS_RANGES)
+            ?: return listOf(FrameRate.FPS30)
+        val highest = ranges.maxOfOrNull { it.upper } ?: 30
+        return FrameRate.values().filter { it.value <= highest }.ifEmpty { listOf(FrameRate.FPS30) }
+    }
+
+    private fun bestFpsRange(): Range<Int>? {
+        val chars = characteristics ?: return null
+        val ranges = chars.get(CameraCharacteristics.CONTROL_AE_AVAILABLE_TARGET_FPS_RANGES)
+            ?: return null
+        if (ranges.isEmpty()) return null
+        // A fixed range is steadier than a variable one, so prefer the narrowest that
+        // contains the target frame rate.
+        return ranges.filter { it.lower <= targetFps && it.upper >= targetFps }
+            .minByOrNull { it.upper - it.lower }
+            ?: ranges.minByOrNull { kotlin.math.abs(it.upper - targetFps) }
+    }
+
     fun stillSize(): Size? {
         val map = characteristics?.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP)
             ?: return null
         val sizes = map.getOutputSizes(ImageFormat.JPEG)?.toList() ?: return null
         // Cap at roughly 20 megapixels: beyond that the crops cost more memory than they
         // are worth on a mid-range phone.
-        val usable = sizes.filter { it.width.toLong() * it.height <= 20_000_000L }.ifEmpty { sizes }
+        val usable = sizes.filter { it.width.toLong() * it.height <= photoRes.maxPixels }
+            .ifEmpty { listOf(sizes.minByOrNull { it.width.toLong() * it.height }!!) }
         return usable.maxByOrNull { it.width.toLong() * it.height }
     }
 
@@ -221,6 +247,9 @@ class CameraEngine(private val context: Context) {
                         CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_VIDEO
                     )
                     set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_ON)
+                    bestFpsRange()?.let {
+                        set(CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE, it)
+                    }
                 }
                 requestBuilder = builder
                 applyZoom(builder)

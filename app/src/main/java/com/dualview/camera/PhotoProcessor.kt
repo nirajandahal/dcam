@@ -9,7 +9,6 @@ import android.graphics.ColorMatrixColorFilter
 import android.graphics.Matrix
 import android.graphics.Paint
 import android.graphics.Rect
-import android.net.Uri
 import com.dualview.camera.gl.TextureProgram
 import java.io.ByteArrayInputStream
 
@@ -29,8 +28,9 @@ object PhotoProcessor {
         rotation: Int,
         mirror: Boolean,
         formats: List<OutputFormat>,
-        look: Int
-    ): List<Pair<OutputFormat, Uri>> {
+        look: Int,
+        toGallery: Boolean
+    ): List<OutputFormat> {
 
         val decoder = try {
             BitmapRegionDecoder.newInstance(ByteArrayInputStream(jpeg), false)
@@ -46,7 +46,7 @@ object PhotoProcessor {
 
         val store = CaptureStore(context)
         val stamp = CaptureStore.timestamp()
-        val results = ArrayList<Pair<OutputFormat, Uri>>(formats.size)
+        val results = ArrayList<OutputFormat>(formats.size)
 
         for (format in formats) {
             val crop = Planner.cropSize(format, uprightWidth, uprightHeight)
@@ -71,9 +71,9 @@ object PhotoProcessor {
             bitmap = applyLook(bitmap, look)
 
             val name = CaptureStore.nameFor("DualView", format, stamp, "jpg")
-            val uri = store.saveImage(bitmap, name)
+            val ok = store.saveImage(bitmap, name, toGallery)
             bitmap.recycle()
-            if (uri != null) results.add(format to uri)
+            if (ok) results.add(format)
         }
 
         try {
