@@ -33,6 +33,7 @@ import java.util.concurrent.Executors
 class MainActivity : AppCompatActivity(), CameraEngine.Listener, RenderEngine.Listener {
 
     private lateinit var viewfinder: FrameLayout
+    private lateinit var previewFrame: AspectFrameLayout
     private lateinit var preview: SurfaceView
     private lateinit var overlay: OverlayView
     private lateinit var statusText: TextView
@@ -86,7 +87,7 @@ class MainActivity : AppCompatActivity(), CameraEngine.Listener, RenderEngine.Li
     private var surfaceReady = false
     private var pendingCountdown: Runnable? = null
     private var lastPlan: List<TargetSpec> = emptyList()
-    private var sizedAspect = 0f
+    private var previewRotation = 0
 
     private val timerTick = object : Runnable {
         override fun run() {
@@ -133,6 +134,8 @@ class MainActivity : AppCompatActivity(), CameraEngine.Listener, RenderEngine.Li
         applyTimerSelection()
         applyLookSelection()
         applyZoomSelection()
+        applyRotationSelection()
+        renderEngine.setTextureRotation(previewRotation)
     }
 
     private fun prefs() = getSharedPreferences("dualview", Context.MODE_PRIVATE)
@@ -153,6 +156,7 @@ class MainActivity : AppCompatActivity(), CameraEngine.Listener, RenderEngine.Li
         noiseCancellation = p.getBoolean("noise", true)
         autoSave = p.getBoolean("autoSave", true)
         mirrorFront = p.getBoolean("mirror", true)
+        previewRotation = p.getInt("previewRotation", 0)
 
         audioSwitch.isChecked = recordAudio
         noiseSwitch.isChecked = noiseCancellation
@@ -172,11 +176,13 @@ class MainActivity : AppCompatActivity(), CameraEngine.Listener, RenderEngine.Li
             .putBoolean("noise", noiseCancellation)
             .putBoolean("autoSave", autoSave)
             .putBoolean("mirror", mirrorFront)
+            .putInt("previewRotation", previewRotation)
             .apply()
     }
 
     private fun bindViews() {
         viewfinder = findViewById(R.id.viewfinder)
+        previewFrame = findViewById(R.id.previewFrame)
         preview = findViewById(R.id.preview)
         overlay = findViewById(R.id.overlay)
         statusText = findViewById(R.id.statusText)
@@ -281,6 +287,11 @@ class MainActivity : AppCompatActivity(), CameraEngine.Listener, RenderEngine.Li
 
         findViewById<View>(R.id.diagnosticsBtn).setOnClickListener { showDiagnostics() }
 
+        findViewById<View>(R.id.rot0).setOnClickListener { changePreviewRotation(0) }
+        findViewById<View>(R.id.rot90).setOnClickListener { changePreviewRotation(90) }
+        findViewById<View>(R.id.rot180).setOnClickListener { changePreviewRotation(180) }
+        findViewById<View>(R.id.rot270).setOnClickListener { changePreviewRotation(270) }
+
         findViewById<View>(R.id.zoom1).setOnClickListener { changeZoom(1f) }
         findViewById<View>(R.id.zoom2).setOnClickListener { changeZoom(2f) }
         findViewById<View>(R.id.zoom3).setOnClickListener { changeZoom(3f) }
@@ -357,6 +368,7 @@ class MainActivity : AppCompatActivity(), CameraEngine.Listener, RenderEngine.Li
             if (renderEngine.hasSurfaceTexture() && !cameraOpen) openCameraNow()
         }
         renderEngine.setFrameRate(frameRate.value)
+        renderEngine.setTextureRotation(previewRotation)
         updatePlan()
         applyFrameRateSelection()
         flashBtn.visibility = if (cameraEngine.hasTorch()) View.VISIBLE else View.GONE
@@ -417,33 +429,7 @@ class MainActivity : AppCompatActivity(), CameraEngine.Listener, RenderEngine.Li
         val quarterTurn = cameraEngine.sensorRotation % 180 != 0
         val uprightWidth = if (quarterTurn) source.height else source.width
         val uprightHeight = if (quarterTurn) source.width else source.height
-        val aspect = uprightWidth.toFloat() / uprightHeight.toFloat()
-        if (aspect == sizedAspect) return
-        sizedAspect = aspect
-
-        viewfinder.post {
-            val availableWidth = viewfinder.width
-            val availableHeight = viewfinder.height
-            if (availableWidth == 0 || availableHeight == 0) return@post
-
-            var targetWidth = availableWidth
-            var targetHeight = (targetWidth / aspect).toInt()
-            if (targetHeight > availableHeight) {
-                targetHeight = availableHeight
-                targetWidth = (targetHeight * aspect).toInt()
-            }
-
-            applySize(preview, targetWidth, targetHeight)
-            applySize(overlay, targetWidth, targetHeight)
-        }
-    }
-
-    private fun applySize(view: View, width: Int, height: Int) {
-        val params = view.layoutParams as FrameLayout.LayoutParams
-        params.width = width
-        params.height = height
-        params.gravity = android.view.Gravity.CENTER
-        view.layoutParams = params
+        previewFrame.aspectRatio = uprightWidth.toFloat() / uprightHeight.toFloat()
     }
 
     // ---- Planning / status ----
@@ -522,6 +508,20 @@ class MainActivity : AppCompatActivity(), CameraEngine.Listener, RenderEngine.Li
         torchOn = false
         flashBtn.setImageResource(R.drawable.ic_flash_off)
         restartForNewSource()
+    }
+
+    private fun changePreviewRotation(degrees: Int) {
+        previewRotation = degrees
+        renderEngine.setTextureRotation(degrees)
+        applyRotationSelection()
+        savePreferences()
+    }
+
+    private fun applyRotationSelection() {
+        findViewById<View>(R.id.rot0).isSelected = previewRotation == 0
+        findViewById<View>(R.id.rot90).isSelected = previewRotation == 90
+        findViewById<View>(R.id.rot180).isSelected = previewRotation == 180
+        findViewById<View>(R.id.rot270).isSelected = previewRotation == 270
     }
 
     private fun changeZoom(value: Float) {
@@ -776,13 +776,21 @@ class MainActivity : AppCompatActivity(), CameraEngine.Listener, RenderEngine.Li
         val uprightHeight = if (quarterTurn) source.width else source.height
         val still = cameraEngine.stillSize()
 
+        val versionName = try {
+            packageManager.getPackageInfo(packageName, 0).versionName ?: "unknown"
+        } catch (t: Throwable) {
+            "unknown"
+        }
+
         val builder = StringBuilder()
+        builder.append("DualView $versionName\n")
         builder.append("Phone: ${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}\n")
         builder.append("Android ${android.os.Build.VERSION.RELEASE} (API ${android.os.Build.VERSION.SDK_INT})\n\n")
 
         builder.append("CAMERA\n")
         builder.append("Facing: ${if (useFront) "front" else "back"}\n")
         builder.append("Sensor rotation: ${cameraEngine.sensorRotation}\u00B0\n")
+        builder.append("Preview rotation: $previewRotation\u00B0\n")
         builder.append("Stream in use: ${source.width}x${source.height}\n")
         builder.append("Upright frame: ${uprightWidth}x${uprightHeight}\n")
         builder.append("Photo size: ${still?.width ?: 0}x${still?.height ?: 0}\n\n")

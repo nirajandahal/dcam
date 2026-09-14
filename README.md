@@ -31,6 +31,11 @@ To build locally instead, open the folder in Android Studio and run, or use
 
 ## Settings
 
+**Preview rotation** 0, 90, 180 or 270. Phones differ in how they hand camera frames to
+the graphics layer, so if the picture appears on its side, step through these until it
+stands upright. The choice is saved per device, and the current value appears in
+diagnostics. It only turns the picture — crops and output sizes are unaffected.
+
 **Video resolution** 720p, 1080p or 4K. **Frame rate** 24, 30 or 60 — rates the camera
 cannot deliver are dimmed rather than offered and left to fail. **Photo resolution** 8 MP,
 12 MP or the sensor's maximum. **Self-timer**, **Look**, **Record sound**, **Noise

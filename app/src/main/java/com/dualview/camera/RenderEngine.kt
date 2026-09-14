@@ -40,7 +40,8 @@ class RenderEngine(private val callbackHandler: Handler) {
     private var previewHeight = 0
     private var sourceWidth = 1920
     private var sourceHeight = 1440
-    private var baseRotation = 90
+    private var sensorRotation = 90
+    private var textureRotation = 0
     private var mirror = false
     private var look = TextureProgram.LOOK_NATURAL
     private var frameIntervalNs = 1_000_000_000L / 30
@@ -56,14 +57,14 @@ class RenderEngine(private val callbackHandler: Handler) {
 
     /** Dimensions of the frame once rotated upright, which is the space crops work in. */
     val uprightWidth: Int
-        get() = if (baseRotation % 180 == 0) sourceWidth else sourceHeight
+        get() = if (sensorRotation % 180 == 0) sourceWidth else sourceHeight
     val uprightHeight: Int
-        get() = if (baseRotation % 180 == 0) sourceHeight else sourceWidth
+        get() = if (sensorRotation % 180 == 0) sourceHeight else sourceWidth
 
     fun configureSource(width: Int, height: Int, rotation: Int, mirrored: Boolean) {
         sourceWidth = width
         sourceHeight = height
-        baseRotation = ((rotation % 360) + 360) % 360
+        sensorRotation = ((rotation % 360) + 360) % 360
         mirror = mirrored
     }
 
@@ -109,6 +110,15 @@ class RenderEngine(private val callbackHandler: Handler) {
             frameIntervalNs = 1_000_000_000L / fps.coerceAtLeast(1)
             lastEncodedNs = 0L
         }
+    }
+
+    /**
+     * Turns the on-screen picture without touching how crops are calculated. Which value is
+     * correct depends on how a given phone hands its camera frames to the graphics layer,
+     * so it is adjustable rather than assumed.
+     */
+    fun setTextureRotation(degrees: Int) {
+        handler?.post { textureRotation = ((degrees % 360) + 360) % 360 }
     }
 
     fun setMirror(value: Boolean) {
@@ -298,7 +308,7 @@ class RenderEngine(private val callbackHandler: Handler) {
         Matrix.setIdentityM(work, 0)
 
         Matrix.translateM(work, 0, 0.5f, 0.5f, 0f)
-        Matrix.rotateM(work, 0, -baseRotation.toFloat(), 0f, 0f, 1f)
+        Matrix.rotateM(work, 0, textureRotation.toFloat(), 0f, 0f, 1f)
         Matrix.translateM(work, 0, -0.5f, -0.5f, 0f)
 
         if (mirror) {
@@ -309,7 +319,7 @@ class RenderEngine(private val callbackHandler: Handler) {
 
         if (extraRotation != 0) {
             Matrix.translateM(work, 0, 0.5f, 0.5f, 0f)
-            Matrix.rotateM(work, 0, -extraRotation.toFloat(), 0f, 0f, 1f)
+            Matrix.rotateM(work, 0, extraRotation.toFloat(), 0f, 0f, 1f)
             Matrix.translateM(work, 0, -0.5f, -0.5f, 0f)
         }
 

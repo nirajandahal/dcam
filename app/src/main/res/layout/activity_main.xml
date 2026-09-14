@@ -93,6 +93,34 @@
                 android:contentDescription="Settings" />
         </LinearLayout>
 
+        <!-- ===== Viewfinder ===== -->
+        <FrameLayout
+            android:id="@+id/viewfinder"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            app:layout_constraintTop_toBottomOf="@id/topBar"
+            app:layout_constraintBottom_toTopOf="@id/bottomBar"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent">
+
+            <com.dualview.camera.AspectFrameLayout
+                android:id="@+id/previewFrame"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center">
+
+                <SurfaceView
+                    android:id="@+id/preview"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent" />
+
+                <com.dualview.camera.OverlayView
+                    android:id="@+id/overlay"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent" />
+            </com.dualview.camera.AspectFrameLayout>
+        </FrameLayout>
+
         <!-- ===== Recording badge ===== -->
         <LinearLayout
             android:id="@+id/recBadge"
@@ -125,27 +153,6 @@
                 android:textStyle="bold"
                 android:fontFamily="monospace" />
         </LinearLayout>
-
-        <!-- ===== Viewfinder ===== -->
-        <FrameLayout
-            android:id="@+id/viewfinder"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            app:layout_constraintTop_toBottomOf="@id/topBar"
-            app:layout_constraintBottom_toTopOf="@id/bottomBar"
-            app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintEnd_toEndOf="parent">
-
-            <SurfaceView
-                android:id="@+id/preview"
-                android:layout_width="match_parent"
-                android:layout_height="match_parent" />
-
-            <com.dualview.camera.OverlayView
-                android:id="@+id/overlay"
-                android:layout_width="match_parent"
-                android:layout_height="match_parent" />
-        </FrameLayout>
 
         <!-- ===== Bottom controls ===== -->
         <LinearLayout

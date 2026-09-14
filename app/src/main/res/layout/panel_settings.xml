@@ -95,6 +95,18 @@
                     <TextView android:id="@+id/photoMax" style="@style/OptionChip" android:text="Max" />
                 </LinearLayout>
 
+                <TextView style="@style/SettingLabel" android:text="Preview rotation" />
+                <TextView
+                    style="@style/SettingHint"
+                    android:text="If the picture is on its side, step through these until it stands up. Saved for this phone." />
+
+                <LinearLayout android:id="@+id/rotationGroup" style="@style/SegmentRow">
+                    <TextView android:id="@+id/rot0" style="@style/OptionChip" android:text="0" />
+                    <TextView android:id="@+id/rot90" style="@style/OptionChip" android:text="90" />
+                    <TextView android:id="@+id/rot180" style="@style/OptionChip" android:text="180" />
+                    <TextView android:id="@+id/rot270" style="@style/OptionChip" android:text="270" />
+                </LinearLayout>
+
                 <TextView style="@style/SettingLabel" android:text="Self-timer" />
                 <LinearLayout android:id="@+id/timerGroup" style="@style/SegmentRow">
                     <TextView android:id="@+id/t0" style="@style/OptionChip" android:text="Off" />
